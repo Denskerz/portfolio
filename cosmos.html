@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmos OS v1.0</title>
+    <style>
+        :root {
+            --accent: #4facfe;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: #000;
+            font-family: 'Segoe UI', sans-serif; color: white;
+        }
+
+        canvas { position: fixed; top: 0; left: 0; z-index: 1; }
+
+        /* --- NAVIGATION --- */
+        .sidebar {
+            position: fixed; left: 20px; top: 50%; transform: translateY(-50%);
+            z-index: 100; display: flex; flex-direction: column; gap: 15px;
+        }
+
+        .nav-btn {
+            width: 50px; height: 50px; border-radius: 12px;
+            background: var(--glass); border: 1px solid var(--border);
+            color: white; cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+            backdrop-filter: blur(10px); transition: 0.3s;
+        }
+
+        .nav-btn:hover {
+            background: var(--accent); box-shadow: 0 0 20px var(--accent);
+            transform: scale(1.1);
+        }
+
+        /* --- CONTROL PANEL --- */
+        .control-panel {
+            position: fixed; bottom: 30px; right: 30px;
+            background: var(--glass); backdrop-filter: blur(15px);
+            padding: 20px; border-radius: 20px; border: 1px solid var(--border);
+            z-index: 100; width: 250px;
+            opacity: 0; transform: translateY(50px);
+            animation: slideUp 1s forwards 1.5s;
+        }
+
+        @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+
+        .control-panel h3 { margin: 0 0 15px 0; font-size: 0.8rem; letter-spacing: 2px; color: var(--accent); }
+        
+        .slider-group { margin-bottom: 15px; }
+        .slider-group label { display: block; font-size: 10px; margin-bottom: 5px; opacity: 0.7; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--accent); }
+
+        /* --- MAIN CONTENT --- */
+        .main-ui {
+            position: relative; z-index: 10; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: none;
+        }
+
+        .screen {
+            text-align: center; transition: 0.5s;
+            position: absolute; opacity: 0; transform: scale(0.9);
+        }
+
+        .screen.active { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+        h1 { font-size: 4rem; letter-spacing: 20px; text-transform: uppercase; margin: 0; }
+        .btn-main {
+            margin-top: 30px; padding: 12px 35px;
+            background: transparent; border: 1px solid var(--accent);
+            color: var(--accent); cursor: pointer; text-transform: uppercase;
+            letter-spacing: 2px; transition: 0.3s;
+        }
+        .btn-main:hover { background: var(--accent); color: black; }
+
+        /* HUD elements */
+        .hud-line {
+            position: fixed; border: 1px solid var(--border); z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="starfield"></canvas>
+
+    <!-- Боковое меню -->
+    <nav class="sidebar">
+        <button class="nav-btn" onclick="showScreen('home')" title="Главная">🏠</button>
+        <button class="nav-btn" onclick="showScreen('map')" title="Карта">🛰️</button>
+        <button class="nav-btn" onclick="showScreen('data')" title="Данные">📊</button>
+        <button class="nav-btn" onclick="alert('Система в норме')" title="Статус">⚙️</button>
+    </nav>
+
+    <!-- Основные экраны -->
+    <main class="main-ui">
+        <section id="home" class="screen active">
+            <h1>Cosmos</h1>
+            <p style="letter-spacing: 5px; opacity: 0.6;">СИСТЕМА УПРАВЛЕНИЯ ПОЛЕТОМ</p>
+            <button class="btn-main" onclick="accelerate()">Гиперпрыжок</button>
+        </section>
+
+        <section id="map" class="screen">
+            <h2>Звездная карта</h2>
+            <p>Сектор 7Г: Обнаружена туманность Андромеды</p>
+            <div style="width: 200px; height: 2px; background: var(--accent); margin: 20px auto;"></div>
+        </section>
+
+        <section id="data" class="screen">
+            <h2>Телеметрия</h2>
+            <p>Скорость: <span id="speed-val">2</span> ly/s</p>
+            <p>Топливо: 98%</p>
+        </section>
+    </main>
+
+    <!-- Панель настроек -->
+    <aside class="control-panel">
+        <h3>ENGINE CONTROL</h3>
+        <div class="slider-group">
+            <label>СКОРОСТЬ ВАРП-ДВИГАТЕЛЯ</label>
+            <input type="range" id="speedRange" min="0.1" max="20" step="0.1" value="2">
+        </div>
+        <div class="slider-group">
+            <label>ПЛОТНОСТЬ ЗВЕЗД</label>
+            <input type="range" id="countRange" min="100" max="2000" value="800">
+        </div>
+        <button onclick="resetSystem()" style="width: 100%; background: none; border: 1px solid red; color: red; cursor: pointer; font-size: 10px; padding: 5px;">СБРОС СИСТЕМЫ</button>
+    </aside>
+
+    <script>
+        const canvas = document.getElementById('starfield');
+        const ctx = canvas.getContext('2d');
+        let w, h, stars = [];
+        
+        // Параметры, которыми мы управляем
+        let settings = {
+            speed: 2,
+            count: 800
+        };
+
+        function init() {
+            w = window.innerWidth;
+            h = window.innerHeight;
+            canvas.width = w;
+            canvas.height = h;
+            stars = [];
+            for (let i = 0; i < settings.count; i++) {
+                stars.push({
+                    x: Math.random() * w - w / 2,
+                    y: Math.random() * h - h / 2,
+                    z: Math.random() * w
+                });
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            ctx.fillRect(0, 0, w, h);
+            ctx.save();
+            ctx.translate(w / 2, h / 2);
+
+            for (let i = 0; i < stars.length; i++) {
+                let s = stars[i];
+                let x = s.x / (s.z / w);
+                let y = s.y / (s.z / w);
+                let size = Math.max(0, (1 - s.z / w) * 2.5);
+
+                if (x < -w / 2 || x > w / 2 || y < -h / 2 || y > h / 2 || s.z <= 0) {
+                    s.z = w;
+                }
+                s.z -= settings.speed;
+
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(180, 220, 255, ${1 - s.z/w})`;
+                ctx.fill();
+            }
+            ctx.restore();
+            requestAnimationFrame(draw);
+        }
+
+        // Функционал кнопок
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function accelerate() {
+            settings.speed = 40;
+            setTimeout(() => { settings.speed = parseFloat(document.getElementById('speedRange').value); }, 1000);
+        }
+
+        function resetSystem() {
+            location.reload();
+        }
+
+        // Слушатели ползунков
+        document.getElementById('speedRange').addEventListener('input', (e) => {
+            settings.speed = parseFloat(e.target.value);
+            document.getElementById('speed-val').innerText = settings.speed;
+        });
+
+        document.getElementById('countRange').addEventListener('change', (e) => {
+            settings.count = parseInt(e.target.value);
+            init();
+        });
+
+        window.addEventListener('resize', init);
+        init();
+        draw();
+    </script>
+</body>
+</html>
+
